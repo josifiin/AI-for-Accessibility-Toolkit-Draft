@@ -1,222 +1,219 @@
 # Architecture
 
-> Working proposal from the March 2026 design sprint. Evolves as teams contribute.
+> Chrome extension that adapts web pages in real-time using AI.
 
 ## Core Idea
 
-Each team across the collective is building something concrete — accessible simulations, atypical speech tools, memory aids, design assistants. The toolkit gives these projects shared infrastructure and a way to compose with each other.
+Existing accessibility tools (axe-core, Pa11y) give you a report. This toolkit *adapts* the page — AI analyzes what's on the page, understands what the user needs, and fixes it live. Not a report. A working page.
 
-"Agents all the way down" means each shared service is an agent that can be used on its own or wired together with others. But the agents aren't the product — the contributed projects are.
+Teams across the collective contribute capabilities: accessible simulations, atypical speech recognition, memory aids, art descriptions. The extension provides shared infrastructure that these projects can plug into.
 
 ## Principles
 
-- **Projects are the toolkit** — each team contributes tools that handle real accessibility needs
-- **Shared infrastructure, not monoliths** — agents are services that projects plug into
+- **Adapt, don't just audit** — fix issues in real-time, not just report them
 - **Ability-based design** — adapt to what users can do, not what they can't
-- **Human in the loop** — people with disabilities involved in validation, not just as end users
-- **Web-first** — start with web apps, expand later (MIT Media Lab exploring wearables)
-- **Build on existing tools** — axe-core, W3C AT Driver, etc. instead of rebuilding
+- **Human in the loop** — people with disabilities involved in design and evaluation
+- **Build on existing tools** — axe-core for detection, Gemini for AI, darkreader for dark mode
+- **Easy to extend** — add new auditors/adapters with `ai4a11y create`
 
-## How Projects Map In
-
-Each team contributes a project. Projects provide capabilities in one or more areas:
-
-| Project | Team | What it provides |
-|---------|------|-----------------|
-| Accessible simulations | Stanford | Crossmodal transforms for STEM content (visual → audio, haptic) |
-| AiSee / SeEar | MIT Media Lab | Wearable access interfaces (AI headphones for BLV, AR captioning for DHH) |
-| Memoro / MemPal | MIT Media Lab | Interaction memory, wearable object retrieval for older adults |
-| A11Y Ally | RIT / NTID | Design artifact analysis, accessibility recommendations via conversational AI |
-| Atypical speech | RNID | Speech recognition for non-standard speech (builds on Project Euphonia) |
-| ArtInsight | UW | AI-powered art descriptions and spatial browsing for BLV users |
-| PWD reviewer network | The Arc | Compensated human reviewers with disabilities for validation |
-| Global evaluation | UCL GDI Hub | Evaluation frameworks for low-resource and global contexts |
-| NAI + infrastructure | Google | Orchestrator framework, Euphonia ASR, A2UI protocol, compute |
-| *Your project* | *Your team* | [Add yours](../CONTRIBUTING.md) |
-
-Not every project maps neatly to one agent — that's fine. This table grows as teams contribute.
-
-## Shared Agent Services
-
-Infrastructure that projects can use. Each is an agent that works standalone or composed.
+## How It Works
 
 ```mermaid
 flowchart TD
-    subgraph projects ["Tools Library"]
+    subgraph Tools[Tools Library]
         direction LR
-        P1["Accessible Simulations"] ~~~ P2["Atypical Speech"] ~~~ P3["Memory + Wearables"] ~~~ P4["A11Y Ally"] ~~~ P5["..."]
+        T1[Accessible<br/>Simulations]
+        T2[Non-Standard<br/>Speech]
+        T3[Memory<br/>Assistant]
+        T4[Storytelling]
+        T5[Tutoring<br/>Agent]
+        T6[Cognitive<br/>A11y]
+        T7[Meeting<br/>Agent]
+        T8[...]
     end
 
-    projects <--> O["Orchestrator"]
-    C[("Collective Corpus")] -.-> O
+    subgraph Agents[Shared Agent Services]
+        O[Orchestrator]
+        U[User Agent]
+        App[App Agent]
+        Adapt[Adapt Agent]
+    end
 
-    O <--> U["User Agent"]
-    O <--> S["App Agent"]
-    O <--> A["Adapt Agent"]
+    Corpus[(Collective Corpus<br/>guidelines, benchmarks,<br/>personas, patterns)]
+    
+    Web[Web App / Content]
 
-    S <--> W["Web App"]
-    A <--> W
+    Tools <--> O
+    Corpus -.-> O
+    O <--> U
+    O <--> App
+    O <--> Adapt
+    App <--> Web
+    Adapt <--> Web
 ```
 
-### Orchestrator
+### Agent Services
 
-Analyzes the page and plans which tools to run for each user.
+| Agent | Role |
+|-------|------|
+| **Orchestrator** | AI plans which tools to activate based on page content + user profile |
+| **User Agent** | Preferences, ability profiles, interaction history |
+| **App Agent** | Parses web app UI, semantic analysis, accessibility APIs |
+| **Adapt Agent** | Generates adaptations, runs modality transforms, resolves conflicts |
 
-- AI plans which tools to activate based on page content + user profile
-- Falls back to rule-based profile filtering if the AI call fails
-- Manages a shared browser session — one Playwright instance per audit, reused by AppAgent and all tools
-- Auto-discovers installed tools via Python entry points
-- Similar to [Google NAI](https://developers.google.com/natively-adaptive-interfaces) which reconfigures UIs in real-time
+### Chrome Extension Implementation
 
-### User Agent
+The extension implements this architecture for web browsers:
 
-- User preferences (contrast, font size, input method, modality)
-- Ability profiles (with consent)
-- Interaction history (learns from past sessions)
-- Preference portability across apps
+```mermaid
+flowchart LR
+    subgraph Extension[Chrome Extension]
+        direction TB
+        subgraph Content[Content Script]
+            Auditors[Auditors<br/>axe-core, custom]
+            Adapters[Adapters<br/>generate-alt, fix-contrast,<br/>dark-mode, dyslexia-font]
+        end
+        BG[Background Worker]
+    end
+    
+    Storage[(chrome.storage)]
+    Gemini[Gemini API]
+    Libs[/libs: axe-core,<br/>darkreader, readability/]
+    
+    Libs --> Auditors
+    Auditors --> Adapters
+    Storage <--> Content
+    Adapters <--> BG <--> Gemini
+```
 
-**Ability profiles** — combinable (e.g., `["blv", "motor"]` for a blind user with limited mobility):
+**Flow:**
+1. Page loads → extension runs
+2. **Auditors** scan for issues (axe-core + custom detectors)
+3. **Adapters** fix issues (immediate DOM changes or via AI) and apply visual presets
+4. **Background** handles AI API calls (Gemini for descriptions, simplification)
 
-| Profile | Sub-profiles | Primary needs |
-|---------|-------------|--------------|
-| `blv` | `blind`, `low_vision` | Screen reader, audio-first, high contrast, magnification |
-| `color_blind` | | Color-safe design: no color-only info, patterns, labels |
-| `dhh` | `deaf`, `hard_of_hearing` | Captions, visual emphasis, sign language |
-| `motor` | `limited_mobility`, `tremor` | Keyboard-only, switch access, voice control |
-| `cognitive` | `dyslexia`, `idd`, `autism` | Plain language, simplified UI, predictable navigation |
-| `speech` | `nonverbal`, `atypical_speech` | Alternative input, tuned speech recognition |
-| `aging` | | Combined vision + hearing + motor + memory decline |
+## Profiles
 
-### App Agent
+Users select a profile that auto-enables the right tools:
 
-- Parses web app UI elements and capabilities via Playwright
-- AI semantic analysis — understands page purpose, content types, and accessibility challenges beyond raw DOM
-- Interfaces with accessibility APIs (ARIA roles, etc.)
-- Can use [W3C AT Driver](https://github.com/w3c/at-driver) for programmatic screen reader control
+| Profile | What it enables |
+|---------|-----------------|
+| `blind` | Auto alt text, labels, WCAG fixes, keyboard nav |
+| `lowVision` | Large text (150%), enhanced focus, high contrast |
+| `colorBlind` | Color filters, enhanced contrast |
+| `deaf` | Auto captions, visual emphasis |
+| `motor` | Large cursor, keyboard nav, voice commands |
+| `dyslexia` | OpenDyslexic font, wider spacing, focus mode |
+| `adhd` | Focus mode, reduced motion, reader mode |
+| `cognitive` | Simplified text, summaries |
+| `elderly` | Large text, enhanced focus, simplified text |
+| `anxiety` | Calm UI, reduced motion, reader mode |
+| `sensory` | Reduced motion, dark mode, focus mode |
+| `photosensitive` | Dark mode, reduced motion |
 
-### Adapt Agent
+Profiles are defined in `tools/profiles/settings.json`. Users can also toggle individual tools.
 
-- Generates adaptations based on the user's ability profile
-- AI prioritizes adaptations by impact and resolves conflicts between tools targeting the same element
-- Runs `BaseTool.adapt()` on each tool to collect suggested fixes
-- Runs modality transforms: visual → audio, text → simplified text, data → accessible representations
-- Pluggable — projects add new transforms as `BaseTransform` tools
-- Transforms return `TransformResult` with content, MIME type, and metadata (supports text, audio bytes, structured data)
+## Directory Structure
 
-## Collective Corpus
+```
+AI-for-Accessibility-Toolkit-Draft/
+├── tools/                       # Shared JS code (browser-native)
+│   ├── auditors/               # Find issues
+│   │   ├── missing-alt.js
+│   │   ├── missing-labels.js
+│   │   ├── missing-captions.js
+│   │   ├── poor-contrast.js
+│   │   ├── wcag-issues.js      # axe-core wrapper
+│   │   └── index.js
+│   ├── adapters/               # Fix issues + visual presets
+│   │   ├── generate-alt.js     # AI image descriptions
+│   │   ├── generate-labels.js  # AI form labels
+│   │   ├── generate-captions.js # AI audio/video captions
+│   │   ├── fix-contrast.js
+│   │   ├── simplify-text.js    # AI text simplification
+│   │   ├── wcag-fixes.js       # Generic WCAG violation fixes
+│   │   ├── visual-assist.js    # fonts, spacing, cursor, focus
+│   │   ├── dark-mode.js        # DarkReader + CSS fallback
+│   │   ├── motion-reducer.js   # animations, GIFs, parallax
+│   │   ├── color-blind.js      # color correction filters
+│   │   ├── focus-mode.js       # distraction hiding, progress
+│   │   ├── reader-mode.js      # Readability-based reading view
+│   │   ├── read-aloud.js       # text-to-speech
+│   │   ├── voice-commands.js   # voice navigation
+│   │   ├── keyboard-nav.js     # skip links, tab sequence
+│   │   ├── auto-transcriber.js # video/audio captions
+│   │   └── index.js
+│   ├── profiles/               # User presets
+│   │   ├── settings.js
+│   │   └── settings.json
+│   └── utils/                  # Shared utilities (ai.js, dom.js, color.js)
+│
+├── extension/                   # Chrome extension
+│   ├── src/content.js          # Entry point (imports from tools/)
+│   ├── background.js           # Service worker (Gemini API)
+│   ├── popup.html / popup.js   # Extension UI
+│   ├── lib/                    # Vendor libraries (axe, darkreader, etc.)
+│   └── manifest.json
+│
+├── cli/                         # Python CLI
+│   ├── ai4a11y.py              # Playwright + Claude vision
+│   └── cli.py                  # Command wrapper
+│
+└── pyproject.toml               # pip install ai4a11y
+```
 
-WG #2 (Data) curates the content. We define how agents access it.
+## Adding Capabilities
 
-- Accessibility guidelines (WCAG, ARIA, platform-specific)
-- Best practices and design patterns
-- User personas and scenarios
-- Evaluation benchmarks
+```bash
+# Install CLI (one-time)
+pip install -e .
+
+# Scaffold new components
+ai4a11y create missing-landmarks --type auditor
+ai4a11y create fix-tables --type adapter
+
+# Build extension
+npm run build
+```
+
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
+
+## Multi-Team Collaboration
+
+Teams across the collective contribute specialized capabilities. See [projects.md](projects.md) for detailed cards.
+
+| Project | Team | What it does | Status |
+|---------|------|--------------|--------|
+| **NAI** | Google | Multimodal AI agents that adapt UIs in real-time | Demo |
+| **Accessible Interactive Simulations** | Stanford | Sonification of STEM content for BLV learners | Prototype |
+| **Universal Memory Assistant** | MIT Media Lab | Wearable memory assistant for older adults | TBD |
+| **AI-Augmented Storytelling** | UW | Creative expression tools for BLV children | TBD |
+| **Non-Standard Speech** | UCL GDI Hub | Whisper fine-tunes for atypical speech (13 models) | Published |
+| **Founders Think** | UCL GDI Hub | AI tool for disability-innovation founders | TBD |
+| **Videoconferencing Agent** | RNID | Real-time accessibility nudges in video calls | Zoom app |
+| **AI-Powered Tutoring Agent** | NTID | English grammar tutor for DHH students | TBD |
+| **AI for Cognitive Accessibility** | The Arc | Text simplification for IDD users | TBD |
+
+### How projects plug in
+
+Projects contribute as extension components or inform their design:
+
+| Contribution type | Example |
+|-------------------|---------|
+| **Auditor** | Stanford: detect inaccessible simulations |
+| **Adapter** | The Arc: simplify text for cognitive accessibility |
+| **Adapter** | MIT: user context/memory tracking |
+| **ASR integration** | UCL: non-standard speech recognition |
+| **Patterns** | Google NAI: orchestration architecture |
+| **Validation** | The Arc: PWD reviewer network |
 
 ## Build On, Don't Rebuild
 
-| Need | Use | Don't build |
-|------|-----|-------------|
-| WCAG rule checking | [axe-core](https://github.com/dequelabs/axe-core) | Custom rule engine |
-| Screen reader automation | [W3C AT Driver](https://github.com/w3c/at-driver), [Guidepup](https://github.com/guidepup/guidepup) | Custom SR protocol |
-| Agent output format | [A2UI](https://github.com/google/A2UI) (declarative JSON for accessible UIs) | Custom UI spec |
-| CI accessibility checks | [axe-core GitHub Actions](https://github.com/dequelabs/axe-core), [Pa11y CI](https://github.com/pa11y/pa11y-ci) | Custom CI tooling |
-| UI reconfiguration | [Google NAI](https://blog.google/company-news/outreach-and-initiatives/accessibility/natively-adaptive-interfaces-ai-accessibility/) (orchestrator + sub-agents) | Custom orchestration from scratch |
-
-## Plugin Interface
-
-Teams add new capabilities by implementing `BaseTool` or `BaseTransform`.
-
-### BaseTool — detect issues and suggest fixes
-
-```python
-from ai4a11y.tools.base import BaseTool
-from ai4a11y.models import Adaptation, Issue, PageContext
-
-class MyTool(BaseTool):
-    name = "my-tool"
-    description = "What this tool does"
-    ability_profiles = ["blv"]       # who it helps
-    wcag_criteria = ["1.1.1"]        # which standards it addresses
-
-    def analyze(self, page: PageContext) -> list[Issue]:
-        # Detect issues
-        ...
-
-    def adapt(self, page, profile) -> list[Adaptation]:
-        # Suggest or apply fixes (optional)
-        ...
-```
-
-### BaseTransform — convert content across modalities
-
-```python
-from ai4a11y.tools.base import BaseTransform
-from ai4a11y.models import Element, TransformResult
-
-class ChartToAudio(BaseTransform):
-    name = "chart-to-audio"
-    source_modality = "visual"
-    target_modality = "audio"
-
-    def can_transform(self, element: Element) -> bool:
-        return element.tag in ("canvas", "svg")
-
-    def transform(self, element, profile) -> TransformResult:
-        audio_bytes = sonify(element)  # your logic here
-        return TransformResult(
-            content=audio_bytes,
-            content_type="audio/wav",
-            metadata={"duration_ms": 2000},
-        )
-```
-
-`TransformResult` wraps content with its MIME type and metadata — supports text (`text/plain`), audio (`audio/wav`), structured data (`application/json`), or anything else.
-
-### Scaffolding and testing
-
-Create a new tool project: `a11y create my-tool`
-
-Every tool must pass `StandardToolTests` — see `ai4a11y/testing/standard.py`.
-
-### Auto-Discovery
-
-Installed tools are discovered automatically via Python entry points. When you create a project, the generated `pyproject.toml` already declares the entry point:
-
-```toml
-[project.entry-points."ai4a11y.tools"]
-my-tool = "my_tool.tool:MyTool"
-```
-
-`pip install` your tool, and the Orchestrator picks it up — no manual registration needed.
-
-## Repo Structure
-
-```
-ai4a11y/                 # Python package (pip install ai4a11y)
-  agents/                #   UserAgent, AppAgent, AdaptAgent
-  tools/                 #   BaseTool, BaseTransform, registry
-    builtin/             #   Built-in tools (WCAG check via axe-core)
-  scaffold/              #   Project template generator
-  testing/               #   StandardToolTests, StandardTransformTests
-  cli.py                 #   CLI entry point (a11y check, adapt, tools, create)
-  orchestrator.py        #   Coordinates agents and tools
-  llm.py                 #   Multi-provider LLM client (Google, Anthropic, OpenAI)
-  profiles.py            #   Ability profiles (blv, dhh, motor, etc.)
-  models.py              #   Issue, Adaptation, PageContext, AuditResult, TransformResult
-.env.example             # API key template
-projects/                # Contributed projects from each team
-corpus/                  # Shared knowledge base (with Data working group)
-  guidelines/
-  best-practices/
-  personas/
-  benchmarks/
-docs/
-  architecture.md
-tests/                   # Test suite
-```
-
-## Open Questions
-
-- **Corpus format** — structured DB, flat files, vector store?
-- **How agents interact with web apps** — browser extension, proxy, API?
-- **User profile storage and privacy**
+| Need | Use |
+|------|-----|
+| WCAG detection | [axe-core](https://github.com/dequelabs/axe-core) |
+| Dark mode | [darkreader](https://github.com/nicoth-in/darkreader) |
+| AI descriptions | [Gemini API](https://ai.google.dev/) |
+| Dyslexia font | [OpenDyslexic](https://opendyslexic.org/) |
+| Focus management | [focus-trap](https://github.com/focus-trap/focus-trap) |
+| Readability | [Mozilla Readability](https://github.com/nicoth-in/readability) |

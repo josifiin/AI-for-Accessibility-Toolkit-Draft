@@ -2,15 +2,21 @@
 
 ## Which part(s) does it affect?
 
-- [ ] CLI (`a11y check`, `adapt`, `tools`, `create`, `profiles`)
-- [ ] Orchestrator
-- [ ] User Agent
-- [ ] App Agent
-- [ ] Adapt Agent
-- [ ] Tools / Transforms
-- [ ] Collective Corpus
-- [ ] Projects
-- [ ] Tests
+- [ ] Auditors (`tools/auditors/`)
+- [ ] Adapters (`tools/adapters/`)
+- [ ] Profiles (`tools/profiles/`)
+- [ ] CLI (`cli/`)
+- [ ] Background / AI (`extension/background.js`)
+- [ ] Popup UI (`extension/popup.*`)
+- [ ] Voice/Text Control (`webapp/`)
 - [ ] Docs
 
+## Who benefits?
+
+Which profiles/disabilities does this help?
+
 ## How to test
+
+1. `npm install && npm run build`
+2. Load extension in Chrome: `chrome://extensions` → Load unpacked → `extension/`
+3. ...
