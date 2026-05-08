@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,7 +28,7 @@ import google.genai as genai
 
 load_dotenv()
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-MODEL = "gemini-2.5-flash" 
+MODEL = "gemini-3-flash-preview" 
 
 # Load SKILL.md from the harness directory
 SKILL_MD_PATH = Path(HARNESS_DIR) / "SKILL.md"
@@ -43,6 +44,7 @@ Decide what action to take next based on the screenshot.
 
 Available actions (respond with exactly ONE JSON object):
 {{"action": "run_python", "code": "new_tab('https://google.com'); type_text('hello'); press_key('Enter')", "reason": "navigating and searching in one go"}}
+{{"action": "read_skill", "domain": "amazon", "skill_file": "product-search.md", "reason": "reading site-specific tips"}}
 {{"action": "click", "x": 340, "y": 200, "reason": "clicking the search bar"}}
 {{"action": "type", "text": "hello world", "reason": "typing search query"}}
 {{"action": "press_key", "key": "Enter", "reason": "submitting the form"}}
@@ -65,6 +67,7 @@ Rules:
   - page_info() -> returns dict with url, title, etc.
   - js(expression) -> returns result of JS execution
 - Coordinates are in CSS pixels.
+- MANDATORY: If you see skills listed for the current domain in the turn info, you MUST use "read_skill" to read them BEFORE taking any other action (click, type, navigate, etc.). Never guess the site mechanics if a manual exists.
 - Prefer to press 'Enter' when in a search box. Only click the search button if pressing 'Enter' fails to trigger the search.
 - If you are stuck in a loop clicking something that doesn't work, try a different approach (e.g. use "run_python" for a more complex sequence).
 - NEVER repeat an identical failed action—if the red debug circle shows you missed, adjust your coordinates.
@@ -84,13 +87,25 @@ async def execute_action(action: dict, websocket: WebSocket):
     
     loop = asyncio.get_event_loop()
     
-    if act == "run_python":
+    if act == "read_skill":
+        def _read():
+            path = Path(HARNESS_DIR) / "domain-skills" / action["domain"] / action["skill_file"]
+            if path.exists():
+                return path.read_text()
+            return f"Skill {action['domain']}/{action['skill_file']} not found."
+        skill_content = await loop.run_in_executor(None, _read)
+        await websocket.send_json({"type": "log", "message": f"Learned Skill: {skill_content[:100]}..."})
+        # Add to history for the agent to "remember" the skill
+        action["result"] = skill_content
+        return True
+    elif act == "run_python":
         def _run():
             globals_dict = {
                 "capture_screenshot": capture_screenshot, "click_at_xy": click_at_xy, "goto_url": goto_url, 
                 "js": js, "new_tab": new_tab, "page_info": page_info, "press_key": press_key, 
                 "scroll": scroll, "type_text": type_text, "wait": wait, "wait_for_load": wait_for_load,
-                "ensure_daemon": ensure_daemon
+                "ensure_daemon": ensure_daemon,
+                "read_skill": lambda d, f: (Path(HARNESS_DIR) / "domain-skills" / d / f).read_text()
             }
             exec(action["code"], globals_dict)
         await loop.run_in_executor(None, _run)
@@ -153,13 +168,25 @@ async def websocket_endpoint(websocket: WebSocket):
 
         await loop.run_in_executor(None, _get_target_tab)
         
+        # 0. Global Skill Inventory
+        def _get_all_domains():
+            d = Path(HARNESS_DIR) / "domain-skills"
+            return sorted([p.name for p in d.iterdir() if p.is_dir()])
+        all_domains = await loop.run_in_executor(None, _get_all_domains)
+        
         history = []
         
         for step in range(20):
             # 1. See
             shot_b64 = get_screenshot_b64()
-            loop = asyncio.get_event_loop()
             info = await loop.run_in_executor(None, page_info)
+            
+            # Find skills for current domain
+            current_domain = (urlparse(info.get("url", "")).hostname or "").removeprefix("www.").split(".")[0]
+            def _get_current_skills(dom):
+                d = Path(HARNESS_DIR) / "domain-skills" / dom
+                return sorted([p.name for p in d.rglob("*.md")]) if d.is_dir() else []
+            current_skills = await loop.run_in_executor(None, _get_current_skills, current_domain)
             
             await websocket.send_json({"type": "screenshot", "data": shot_b64})
             
@@ -170,9 +197,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 {"role": "user", "parts": [
                     {"text": f"Task: {task}"},
                     {"text": f"Current Page Info: {json.dumps(info)}"},
+                    {"text": f"Available Global Domains in domain-skills/: {json.dumps(all_domains)}"},
+                    {"text": f"Skills discovered for CURRENT domain ({current_domain}): {json.dumps(current_skills)}"},
                     {"text": "Current screenshot:"},
                     {"inline_data": {"mime_type": "image/png", "data": shot_b64}},
-                    {"text": "History:\n" + "\n".join(f"- {h['reason']}" for h in history[-15:]) if history else "None"},
+                    {"text": "History:\n" + "\n".join(f"- {h['action']}: {h['reason']} | Result: {str(h.get('result', 'Success'))[:500]}" for h in history[-15:]) if history else "None"},
                     {"text": "Next action (JSON only):"}
                 ]}
             ]
