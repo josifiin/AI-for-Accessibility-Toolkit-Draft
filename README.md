@@ -69,7 +69,8 @@ Add your own: `ai4a11y create my-tool --type adapter` → see [CONTRIBUTING.md](
 |-----------|-----|------------|----------|
 | **[Chrome Extension](#chrome-extension)** | End users — real-time page adaptation | Gemini | `extension/` |
 | **[Personalized Extension](#personalized-extension)** | AI-powered onboarding + custom skill builder | Gemini | `personalized-extension/` |
-| **[Voice Control Web App](#voice-control-web-app)** | Hands-free browser control via voice | Gemini Live | `webapp/voicecontrol/` |
+| **[Text Control Web App](#text-control-recommended)** | Type commands to control the browser | Gemini | `webapp/textcontrol/` |
+| **[Voice Control Web App](#voice-control)** | Hands-free browser control via voice | Gemini Live | `webapp/voicecontrol/` |
 | **[CLI](#cli)** | Developers / coding agents — audits, automation | Claude | `cli/` |
 
 ## Chrome Extension
@@ -155,16 +156,9 @@ Type commands to control the browser. Uses Gemini 2.5 Flash.
 
 ```bash
 cd webapp/textcontrol/backend
+cp .env.example .env
+# Edit .env with your Gemini API key
 
-# Create .env
-cat > .env << EOF
-USE_VERTEX_AI=false
-GEMINI_API_KEY=your-api-key-here
-AGENT_MODEL=gemini-2.5-flash
-EOF
-
-# Install and run
-uv venv && uv pip install -e . && uv pip install -e ../../browser-harness
 uv run uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
@@ -175,15 +169,11 @@ Open http://localhost:8080 and type commands like "go to google.com".
 Talk to control the browser. Uses Gemini Live API (audio streaming).
 
 ```bash
-cd webapp/voicecontrol
-
 # Backend
-cd backend
-cat > .env << EOF
-GEMINI_API_KEY=your-api-key-here
-DEMO_AGENT_MODEL=gemini-2.5-flash-native-audio-preview-12-2025
-EOF
-uv venv && uv pip install -e . && uv pip install -e ../../browser-harness
+cd webapp/voicecontrol/backend
+cp .env.example .env
+# Edit .env with your Gemini API key
+
 uv run python main.py
 
 # Frontend (new terminal, from repo root)
@@ -293,7 +283,7 @@ AI-for-Accessibility-Toolkit-Draft/
 │   ├── browser-harness/        # CDP browser control daemon (bundled)
 │   ├── textcontrol/            # Text-input browser agent
 │   │   ├── backend/            # FastAPI + Gemini 2.5 Flash
-│   │   └── frontend/           # React UI
+│   │   └── frontend/           # Vanilla HTML/CSS/JS
 │   └── voicecontrol/           # Voice-controlled browser agent
 │       ├── backend/            # FastAPI + Gemini Live API
 │       └── frontend/           # React UI (transcript, viewport, actions)
@@ -351,7 +341,7 @@ See [docs/architecture.md](docs/architecture.md) for technical details.
 
 | Team | Focus |
 |------|-------|
-| Google | NAI — Multimodal AI agents that adapt UIs in real-time |
+| Google.org | NAI — Multimodal AI agents that adapt UIs in real-time |
 | Stanford | Accessible Interactive Simulations — sonification for BLV STEM learners |
 | MIT Media Lab | Universal Memory Assistant — wearable memory aid for older adults |
 | UW | AI-Augmented Storytelling — creative expression tools for BLV children |
@@ -411,8 +401,6 @@ Apache 2.0. See [LICENSE](LICENSE).
 
 <div align="center">
 <p>
-  <a href="https://www.google.org/"><img src="docs/logos/google.png" alt="Google" height="28"></a>
-  &nbsp;&nbsp;
   <a href="https://www.stanford.edu/"><img src="docs/logos/stanford.png" alt="Stanford University" height="38"></a>
   &nbsp;&nbsp;
   <a href="https://www.washington.edu/"><img src="docs/logos/uw.png" alt="University of Washington" height="32"></a>
@@ -426,6 +414,8 @@ Apache 2.0. See [LICENSE](LICENSE).
   <a href="https://thearc.org/"><img src="docs/logos/thearc.png" alt="The Arc" height="35"></a>
   &nbsp;&nbsp;
   <a href="https://rnid.org.uk/"><img src="docs/logos/rnid.png" alt="RNID" height="32"></a>
+  &nbsp;&nbsp;
+  <a href="https://www.google.org/"><img src="docs/logos/google.png" alt="Google.org" height="28"></a>
 </p>
 
 </div>
